@@ -751,6 +751,58 @@ impl Default for SafetyConfig {
     }
 }
 
+/// Rust Token Killer (RTK) integration configuration
+///
+/// RTK is a CLI proxy that filters and compresses command outputs before they
+/// reach the LLM context window, reducing token usage.
+/// See: https://github.com/davidpomerenke/rust-token-killer
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RtkConfig {
+    /// Enable RTK command rewriting (default: auto-detect based on `rtk` binary presence)
+    /// Set to `true` to force-enable, `false` to disable.
+    pub enabled: Option<bool>,
+    /// Path to the rtk binary (default: auto-detected via PATH)
+    pub binary: Option<String>,
+}
+
+impl Default for RtkConfig {
+    fn default() -> Self {
+        Self {
+            enabled: None,  // None = auto-detect
+            binary: None,   // None = use PATH
+        }
+    }
+}
+
+impl RtkConfig {
+    /// Returns true if RTK integration should be active.
+    /// Auto-detects by checking if `rtk` is in PATH when `enabled` is None.
+    pub fn is_active(&self) -> bool {
+        if let Some(enabled) = self.enabled {
+            return enabled;
+        }
+        // Auto-detect: check if rtk binary exists
+        let bin = self.binary_path();
+        which_rtk(&bin)
+    }
+
+    /// Returns the path to the rtk binary to use.
+    pub fn binary_path(&self) -> String {
+        self.binary.clone().unwrap_or_else(|| "rtk".to_string())
+    }
+}
+
+fn which_rtk(bin: &str) -> bool {
+    std::process::Command::new(bin)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 /// WebSocket gateway configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]

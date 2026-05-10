@@ -443,6 +443,44 @@ fn build_shell_command(cmd_str: &str) -> TokioCommand {
     }
 }
 
+/// Try to rewrite a command through RTK for token-efficient output.
+///
+/// RTK (Rust Token Killer) intercepts commands like `git`, `ls`, `cargo`, etc.
+/// and returns compact, LLM-friendly output. If RTK is not installed or the
+/// command has no RTK equivalent, the original command is returned unchanged.
+///
+/// RTK's `rewrite` subcommand exits:
+///   - 0 or 3  → rewritten command printed to stdout (use it)
+///   - 1       → no rewrite available (use original)
+fn try_rtk_rewrite(command: &str) -> String {
+    let rtk_cfg = &crate::config::config().rtk;
+    if !rtk_cfg.is_active() {
+        return command.to_string();
+    }
+
+    let bin = rtk_cfg.binary_path();
+    let result = StdCommand::new(&bin)
+        .arg("rewrite")
+        .arg(command)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output();
+
+    match result {
+        Ok(output) if !output.stdout.is_empty() => {
+            // exit 0 or 3: RTK produced a rewritten command
+            let rewritten = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if rewritten.is_empty() {
+                command.to_string()
+            } else {
+                crate::logging::info(&format!("[RTK] rewrote: {:?} → {:?}", command, rewritten));
+                rewritten
+            }
+        }
+        _ => command.to_string(),
+    }
+}
+
 #[cfg(unix)]
 fn build_detached_shell_wrapper(command: &str) -> StdCommand {
     let mut cmd = StdCommand::new("bash");
@@ -603,6 +641,10 @@ impl Tool for BashTool {
                 params.command = format!("BROWSER_SESSION={} {}", session_name, params.command);
             }
         }
+
+        // Apply RTK command rewriting for token-efficient output (foreground only).
+        // Background commands stream output to file; RTK's filtering is less useful there.
+        params.command = try_rtk_rewrite(&params.command);
 
         // Foreground execution with stdin detection
         self.execute_foreground(&params, &ctx).await

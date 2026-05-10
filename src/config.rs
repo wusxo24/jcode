@@ -8,7 +8,7 @@ pub use jcode_config_types::{
     CompactionMode, CrossProviderFailoverMode, DiagramDisplayMode, DiagramPanePosition,
     DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig, KeybindingsConfig,
     MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
-    NamedProviderType, NativeScrollbarConfig, ProviderConfig, SafetyConfig,
+    NamedProviderType, NativeScrollbarConfig, ProviderConfig, RtkConfig, SafetyConfig,
     SessionPickerResumeAction, UpdateChannel,
 };
 use serde::{Deserialize, Serialize};
@@ -73,6 +73,9 @@ pub struct Config {
 
     /// Auto-judge configuration
     pub autojudge: AutoJudgeConfig,
+
+    /// Rust Token Killer (RTK) integration
+    pub rtk: RtkConfig,
 }
 
 /// External dictation / speech-to-text integration.
