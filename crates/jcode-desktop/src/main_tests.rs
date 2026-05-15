@@ -167,17 +167,16 @@ fn single_session_typography_targets_jetbrains_mono_light_nerd() {
         SINGLE_SESSION_DEFAULT_FONT_SIZE
     );
     assert_eq!(
-        SINGLE_SESSION_BODY_FONT_SIZE,
-        SINGLE_SESSION_CODE_FONT_SIZE * 1.5
+        SINGLE_SESSION_ASSISTANT_FONT_FAMILY,
+        SINGLE_SESSION_FONT_FAMILY
     );
+    assert_eq!(SINGLE_SESSION_WELCOME_FONT_FAMILY, "Homemade Apple");
+    assert_eq!(SINGLE_SESSION_BODY_FONT_SIZE, SINGLE_SESSION_CODE_FONT_SIZE);
     assert_eq!(
         SINGLE_SESSION_META_FONT_SIZE,
         SINGLE_SESSION_DEFAULT_FONT_SIZE
     );
-    assert_eq!(
-        SINGLE_SESSION_CODE_FONT_SIZE,
-        SINGLE_SESSION_DEFAULT_FONT_SIZE + 3.0
-    );
+    assert_eq!(SINGLE_SESSION_CODE_FONT_SIZE, SINGLE_SESSION_BODY_FONT_SIZE);
     assert!(SINGLE_SESSION_BODY_LINE_HEIGHT > SINGLE_SESSION_CODE_LINE_HEIGHT);
     assert!(SINGLE_SESSION_CODE_LINE_HEIGHT > SINGLE_SESSION_META_LINE_HEIGHT);
 }
@@ -237,7 +236,7 @@ fn fresh_single_session_restores_dominant_welcome_hero_without_input_hline() {
     let tick_zero = build_single_session_vertices(&app, size, 0.0, 0);
 
     assert!(vertices_have_color(&tick_zero, WELCOME_AURORA_BLUE));
-    assert!(vertices_have_color(&tick_zero, WELCOME_HANDWRITING_COLOR));
+    assert_runtime_welcome_hero_available(&app, size);
     assert!(!vertices_have_color(
         &tick_zero,
         [0.060, 0.085, 0.145, 0.34]
@@ -246,6 +245,7 @@ fn fresh_single_session_restores_dominant_welcome_hero_without_input_hline() {
     app.handle_key(KeyInput::Character("hello".to_string()));
     let typed = build_single_session_vertices(&app, size, 0.0, 18);
     assert!(vertices_have_color(&typed, WELCOME_AURORA_BLUE));
+    assert_runtime_welcome_hero_available(&app, size);
     assert!(!vertices_have_color(&typed, [0.060, 0.085, 0.145, 0.34]));
 }
 
@@ -1092,20 +1092,19 @@ fn fresh_welcome_greeting_uses_handwritten_hero_chrome() {
     assert_is_handwritten_welcome_phrase(&key.welcome_hero);
     assert_visual_text_contains(&key, &key.welcome_hero);
     assert!(key.welcome_hint.is_empty());
-    assert!(vertices_have_color(&vertices, WELCOME_HANDWRITING_COLOR));
+    assert!(vertices_have_color(&vertices, WELCOME_AURORA_BLUE));
+    assert_runtime_welcome_hero_available(&app, PhysicalSize::new(1000, 720));
 }
 
 #[test]
 fn fresh_welcome_handwriting_reveals_over_time() {
-    let app = SingleSessionApp::new(None);
-    let size = PhysicalSize::new(1000, 720);
-    let early = build_single_session_vertices(&app, size, 0.0, 0);
-    let middle = build_single_session_vertices(&app, size, 0.0, 4);
-    let done = build_single_session_vertices(&app, size, 0.0, 10);
-
-    let early_ink = vertices_with_color_count(&early, WELCOME_HANDWRITING_COLOR);
-    let middle_ink = vertices_with_color_count(&middle, WELCOME_HANDWRITING_COLOR);
-    let done_ink = vertices_with_color_count(&done, WELCOME_HANDWRITING_COLOR);
+    let mask = build_hero_mask_image("Hello there", 640, 180, 96.0)
+        .expect("runtime hero mask should be generated from bundled font");
+    let early_ink = revealed_hero_mask_pixel_count(&mask, welcome_hero_reveal_progress_for_tick(0));
+    let middle_ink =
+        revealed_hero_mask_pixel_count(&mask, welcome_hero_reveal_progress_for_tick(4));
+    let done_ink = revealed_hero_mask_pixel_count(&mask, 1.0);
+    let full_ink = hero_mask_alpha_pixel_count(&mask);
 
     assert!(early_ink > 0, "first frame should show initial ink");
     assert!(
@@ -1113,11 +1112,9 @@ fn fresh_welcome_handwriting_reveals_over_time() {
         "handwritten ink should grow during reveal: early={early_ink}, middle={middle_ink}"
     );
     assert_eq!(
-        done_ink, 0,
-        "completed reveal should hand off to the clean font without overlapping stroke ink"
+        done_ink, full_ink,
+        "completed reveal should show every runtime font-mask pixel"
     );
-    assert!(vertices_have_color(&middle, WELCOME_HANDWRITING_COLOR));
-    assert!(!vertices_have_color(&done, WELCOME_HANDWRITING_COLOR));
 }
 
 #[test]
@@ -1365,11 +1362,80 @@ fn glyphon_body_buffer_uses_line_style_colors() {
     );
     assert_eq!(
         first_glyph_color_for_text(body, "  bash done"),
-        Some(single_session_line_color(SingleSessionLineStyle::Tool))
+        Some(text_color(TOOL_MUTED_TEXT_COLOR))
     );
     assert_eq!(
         first_glyph_color_for_text(body, "  model switched"),
         Some(single_session_line_color(SingleSessionLineStyle::Meta))
+    );
+}
+
+#[test]
+fn single_session_tool_text_segments_use_stateful_colors() {
+    let lines = [
+        SingleSessionStyledLine {
+            text: "  ✓ bash · done · tests passed".to_string(),
+            style: SingleSessionLineStyle::Tool,
+        },
+        SingleSessionStyledLine {
+            text: "  │intent: Run tests                                            │".to_string(),
+            style: SingleSessionLineStyle::Tool,
+        },
+        SingleSessionStyledLine {
+            text: "  plain tool output".to_string(),
+            style: SingleSessionLineStyle::Tool,
+        },
+    ];
+
+    let segments = single_session_styled_text_segments(&lines);
+
+    assert!(
+        segments.contains(&(
+            "✓",
+            Attrs::new()
+                .family(Family::Name(SINGLE_SESSION_FONT_FAMILY))
+                .color(text_color(TOOL_SUCCESS_TEXT_COLOR))
+        ))
+    );
+    assert!(
+        segments.contains(&(
+            "bash",
+            Attrs::new()
+                .family(Family::Name(SINGLE_SESSION_FONT_FAMILY))
+                .color(text_color(TOOL_TEXT_COLOR))
+        ))
+    );
+    assert!(
+        segments.contains(&(
+            "done",
+            Attrs::new()
+                .family(Family::Name(SINGLE_SESSION_FONT_FAMILY))
+                .color(text_color(TOOL_SUCCESS_TEXT_COLOR))
+        ))
+    );
+    assert!(
+        segments.contains(&(
+            "tests passed",
+            Attrs::new()
+                .family(Family::Name(SINGLE_SESSION_FONT_FAMILY))
+                .color(text_color(TOOL_DETAIL_TEXT_COLOR))
+        ))
+    );
+    assert!(
+        segments.contains(&(
+            "intent: Run tests",
+            Attrs::new()
+                .family(Family::Name(SINGLE_SESSION_FONT_FAMILY))
+                .color(text_color(TOOL_DETAIL_TEXT_COLOR))
+        ))
+    );
+    assert!(
+        segments.contains(&(
+            "plain tool output",
+            Attrs::new()
+                .family(Family::Name(SINGLE_SESSION_FONT_FAMILY))
+                .color(text_color(TOOL_DETAIL_TEXT_COLOR))
+        ))
     );
 }
 
@@ -1426,10 +1492,30 @@ fn vertices_have_color(vertices: &[Vertex], color: [f32; 4]) -> bool {
     vertices.iter().any(|vertex| vertex.color == color)
 }
 
-fn vertices_with_color_count(vertices: &[Vertex], color: [f32; 4]) -> usize {
-    vertices
-        .iter()
-        .filter(|vertex| vertex.color == color)
+fn assert_runtime_welcome_hero_available(app: &SingleSessionApp, size: PhysicalSize<u32>) {
+    let rendered_body_lines = single_session_rendered_body_lines_for_tick(app, size, 0);
+    let spec =
+        welcome_hero_runtime_mask_spec_for_total_lines(app, size, 0.0, rendered_body_lines.len())
+            .expect("fresh welcome hero should be rendered by the runtime font mask");
+    assert_eq!(spec.phrase, app.welcome_hero_text());
+    assert!(spec.rect.width > size.width as f32 * 0.25);
+    assert!(spec.rect.height > 40.0);
+    assert!(spec.font_size > 40.0);
+}
+
+fn hero_mask_alpha_pixel_count(mask: &HeroMaskImage) -> usize {
+    mask.glyph_rgba
+        .chunks_exact(4)
+        .filter(|pixel| pixel[0] > 2)
+        .count()
+}
+
+fn revealed_hero_mask_pixel_count(mask: &HeroMaskImage, progress: f32) -> usize {
+    let threshold = (progress.clamp(0.0, 1.0) * 255.0).round() as u8;
+    mask.glyph_rgba
+        .chunks_exact(4)
+        .zip(mask.reveal_rgba.chunks_exact(4))
+        .filter(|(glyph, reveal)| glyph[0] > 2 && reveal[0] <= threshold)
         .count()
 }
 
@@ -1520,6 +1606,44 @@ fn single_session_tool_events_expand_context_and_collapse_previous_call() {
     assert!(body.contains("  ✓ bash · done · tests passed"));
     assert!(!body.contains("Run desktop tests"));
     assert!(body.contains("  ○ read · preparing"));
+}
+
+#[test]
+fn single_session_tool_event_preserves_prior_streaming_text_order() {
+    let mut app = SingleSessionApp::new(None);
+
+    app.apply_session_event(session_launch::DesktopSessionEvent::TextDelta(
+        "Before the tool".to_string(),
+    ));
+    app.apply_session_event(session_launch::DesktopSessionEvent::ToolStarted {
+        name: "bash".to_string(),
+    });
+    app.apply_session_event(session_launch::DesktopSessionEvent::ToolFinished {
+        name: "bash".to_string(),
+        summary: "done".to_string(),
+        is_error: false,
+    });
+    app.apply_session_event(session_launch::DesktopSessionEvent::TextDelta(
+        "After the tool".to_string(),
+    ));
+
+    let body = app.body_lines().join("\n");
+    let before = body
+        .find("Before the tool")
+        .expect("streaming text before tool is rendered");
+    let tool = body.find("bash").expect("tool message is rendered");
+    let after = body
+        .find("After the tool")
+        .expect("streaming text after tool is rendered");
+
+    assert!(
+        before < tool,
+        "assistant text that arrived before a tool should stay above the tool: {body}"
+    );
+    assert!(
+        tool < after,
+        "assistant text that arrives after a tool should stay below the tool: {body}"
+    );
 }
 
 #[test]
@@ -3174,7 +3298,11 @@ fn fresh_welcome_uses_dominant_hero_composer_while_drafting() {
         areas.first().expect("draft text area").top,
         fresh_welcome_draft_top(size)
     );
-    assert_eq!(areas.len(), 5, "fresh welcome hides normal status chrome");
+    assert_eq!(
+        areas.len(),
+        4,
+        "fresh welcome hides normal status chrome and renders hero through the runtime mask"
+    );
     assert!(
         areas.first().expect("draft text area").top > handwritten_welcome_bounds(size).1[1],
         "fresh input line should stay visually below the handwritten hero"
@@ -3201,7 +3329,7 @@ fn fresh_welcome_uses_dominant_hero_composer_while_drafting() {
 }
 
 #[test]
-fn completed_welcome_hero_hands_off_to_clean_font_overlay() {
+fn completed_welcome_hero_uses_runtime_font_mask_without_overlay() {
     let size = PhysicalSize::new(1000, 720);
     let app = SingleSessionApp::new(None);
     let mut font_system = FontSystem::new();
@@ -3215,11 +3343,12 @@ fn completed_welcome_hero_hands_off_to_clean_font_overlay() {
         &completed_vertices,
         WELCOME_HANDWRITING_COLOR
     ));
+    assert_runtime_welcome_hero_available(&app, size);
     assert!(
         completed_areas
             .iter()
-            .any(|area| std::ptr::eq(area.buffer, &buffers[6])),
-        "completed reveal should hand off from vector handwriting to the clean shaped text overlay"
+            .all(|area| !std::ptr::eq(area.buffer, &buffers[6])),
+        "runtime hero mask owns the final handwritten font pixels without a glyphon overlay"
     );
 }
 
@@ -3298,7 +3427,7 @@ fn fresh_submit_keeps_single_visual_timeline_without_transcript_greeting() {
     assert!(key.status.contains("Esc interrupt"));
     assert_visual_text_contains(&key, &key.welcome_hero);
     assert!(vertices_have_color(&vertices, WELCOME_AURORA_BLUE));
-    assert!(vertices_have_color(&vertices, WELCOME_HANDWRITING_COLOR));
+    assert_runtime_welcome_hero_available(&app, size);
     assert!(vertices_have_color(&vertices, NATIVE_SPINNER_HEAD_COLOR));
     assert!(
         key.body
@@ -3402,7 +3531,6 @@ fn long_transcript_keeps_welcome_visual_only() {
     app.scroll_body_lines(metrics.max_scroll_lines as i32);
     let top = single_session_visible_body(&app, size).join("\n");
     let key = single_session_text_key(&app, size);
-    let vertices = build_single_session_vertices(&app, size, 0.0, 0);
 
     assert!(
         !HANDWRITTEN_WELCOME_PHRASES
@@ -3411,7 +3539,7 @@ fn long_transcript_keeps_welcome_visual_only() {
     );
     assert!(!top.contains("message 47"));
     assert_is_handwritten_welcome_phrase(&key.welcome_hero);
-    assert!(vertices_have_color(&vertices, WELCOME_HANDWRITING_COLOR));
+    assert_runtime_welcome_hero_available(&app, size);
 }
 
 #[test]

@@ -8,8 +8,8 @@ pub use jcode_config_types::{
     CompactionMode, CrossProviderFailoverMode, DiagramDisplayMode, DiagramPanePosition,
     DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig, KeybindingsConfig,
     MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
-    NamedProviderType, NativeScrollbarConfig, ProviderConfig, RtkConfig, SafetyConfig,
-    SessionPickerResumeAction, UpdateChannel,
+    NamedProviderType, NativeScrollbarConfig, ProviderConfig, SafetyConfig,
+    SessionPickerResumeAction, SwarmSpawnMode, UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -145,6 +145,9 @@ pub struct Config {
 
     /// Feature toggles
     pub features: FeatureConfig,
+
+    /// Web search tool configuration
+    pub websearch: WebSearchConfig,
 
     /// Auth trust / consent configuration
     pub auth: AuthConfig,

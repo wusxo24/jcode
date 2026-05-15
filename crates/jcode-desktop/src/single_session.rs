@@ -8,7 +8,8 @@ use std::hash::{Hash, Hasher};
 use workspace::{KeyInput, KeyOutcome};
 
 pub(crate) const SINGLE_SESSION_FONT_FAMILY: &str = "JetBrainsMono Nerd Font";
-pub(crate) const SINGLE_SESSION_ASSISTANT_FONT_FAMILY: &str = "Homemade Apple";
+pub(crate) const SINGLE_SESSION_ASSISTANT_FONT_FAMILY: &str = SINGLE_SESSION_FONT_FAMILY;
+pub(crate) const SINGLE_SESSION_WELCOME_FONT_FAMILY: &str = "Homemade Apple";
 pub(crate) const SINGLE_SESSION_FONT_WEIGHT: &str = "Light";
 pub(crate) const SINGLE_SESSION_FONT_FALLBACKS: &[&str] = &[
     "JetBrainsMono Nerd Font Mono",
@@ -17,9 +18,9 @@ pub(crate) const SINGLE_SESSION_FONT_FALLBACKS: &[&str] = &[
 ];
 pub(crate) const SINGLE_SESSION_DEFAULT_FONT_SIZE: f32 = 22.0;
 pub(crate) const SINGLE_SESSION_TITLE_FONT_SIZE: f32 = SINGLE_SESSION_DEFAULT_FONT_SIZE;
-pub(crate) const SINGLE_SESSION_BODY_FONT_SIZE: f32 = SINGLE_SESSION_CODE_FONT_SIZE * 1.5;
+pub(crate) const SINGLE_SESSION_BODY_FONT_SIZE: f32 = SINGLE_SESSION_DEFAULT_FONT_SIZE * 1.55;
 pub(crate) const SINGLE_SESSION_META_FONT_SIZE: f32 = SINGLE_SESSION_DEFAULT_FONT_SIZE;
-pub(crate) const SINGLE_SESSION_CODE_FONT_SIZE: f32 = SINGLE_SESSION_DEFAULT_FONT_SIZE + 3.0;
+pub(crate) const SINGLE_SESSION_CODE_FONT_SIZE: f32 = SINGLE_SESSION_BODY_FONT_SIZE;
 pub(crate) const SINGLE_SESSION_BODY_LINE_HEIGHT: f32 = 1.45;
 pub(crate) const SINGLE_SESSION_CODE_LINE_HEIGHT: f32 = 1.35;
 pub(crate) const SINGLE_SESSION_META_LINE_HEIGHT: f32 = 1.25;
@@ -1658,6 +1659,7 @@ impl SingleSessionApp {
             }
             DesktopSessionEvent::ToolStarted { name } => {
                 self.reload_phase = ReloadPhase::Stable;
+                self.finish_streaming_response();
                 self.collapse_active_tool_message();
                 self.active_tool_input_buffer.clear();
                 self.status = Some(format!("preparing tool {name}"));
@@ -1667,11 +1669,13 @@ impl SingleSessionApp {
             }
             DesktopSessionEvent::ToolExecuting { name } => {
                 self.reload_phase = ReloadPhase::Stable;
+                self.finish_streaming_response();
                 self.status = Some(format!("using tool {name}"));
                 self.replace_active_tool_header(&format!("▾ {name} running"));
             }
             DesktopSessionEvent::ToolInput { delta } => {
                 self.reload_phase = ReloadPhase::Stable;
+                self.finish_streaming_response();
                 self.append_active_tool_input(&delta);
             }
             DesktopSessionEvent::ToolFinished {
@@ -1680,6 +1684,7 @@ impl SingleSessionApp {
                 is_error,
             } => {
                 self.reload_phase = ReloadPhase::Stable;
+                self.finish_streaming_response();
                 self.status = Some(if is_error {
                     format!("tool {name} failed")
                 } else {
